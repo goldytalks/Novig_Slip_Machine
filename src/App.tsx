@@ -7,17 +7,17 @@ const SIZES = {
   square: { width: 1080, height: 1080, label: 'Square (1:1)' },
 }
 
-// Brand colors - Updated to match real Novig slips
+// Brand colors
 const COLORS = {
-  background: '#0f0f0f',
-  cardBg: '#1a1a1a',
-  confetti: '#d4a855',
+  background: '#0f172a',
+  cardBg: '#0f172a',
+  contentBg: '#1a1a1a',
   text: '#ffffff',
   textMuted: '#888888',
   pillWon: '#22c55e',
   pillLost: '#ef4444',
   pillPending: '#eab308',
-  accent: '#38bdf8',
+  green: '#22c55e',
 }
 
 type Status = 'Won' | 'Lost' | 'Pending'
@@ -35,12 +35,8 @@ interface BetslipData {
   size: SizeKey
 }
 
-// Generate random bet ID
-const generateBetId = () => {
-  return Math.random().toString(16).slice(2, 14)
-}
+const generateBetId = () => Math.random().toString(16).slice(2, 14)
 
-// Get today's date formatted
 const getTodayDate = () => {
   const today = new Date()
   return `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`
@@ -61,10 +57,9 @@ function App() {
     size: 'widescreen',
   })
 
-  const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null)
+  const [bannerImage, setBannerImage] = useState<HTMLImageElement | null>(null)
   const [cashImage, setCashImage] = useState<HTMLImageElement | null>(null)
 
-  // Load assets on mount
   useEffect(() => {
     const loadImage = (src: string): Promise<HTMLImageElement> => {
       return new Promise((resolve, reject) => {
@@ -76,104 +71,69 @@ function App() {
     }
 
     Promise.all([
-      loadImage('/Novig_Logo.svg'),
+      loadImage('/novig_bg.png'),
       loadImage('/Novig-Cash.png'),
-    ]).then(([logo, cash]) => {
-      setLogoImage(logo)
+    ]).then(([banner, cash]) => {
+      setBannerImage(banner)
       setCashImage(cash)
     })
   }, [])
 
-  // Draw canvas
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !logoImage || !cashImage) return
+    if (!canvas || !bannerImage || !cashImage) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = SIZES[data.size]
-    canvas.width = CANVAS_WIDTH
-    canvas.height = CANVAS_HEIGHT
+    const { width: W, height: H } = SIZES[data.size]
+    canvas.width = W
+    canvas.height = H
 
-    // Clear canvas with dark background
+    // Fill entire canvas with background color (no contrast with card)
     ctx.fillStyle = COLORS.background
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    ctx.fillRect(0, 0, W, H)
 
-    // Card dimensions with padding
-    const padding = data.size === 'square' ? 60 : 80
+    // Card dimensions
+    const padding = 40
     const cardX = padding
     const cardY = padding
-    const cardWidth = CANVAS_WIDTH - padding * 2
-    const cardHeight = CANVAS_HEIGHT - padding * 2
-    const cardRadius = 40
+    const cardW = W - padding * 2
+    const cardH = H - padding * 2
+    const radius = 30
 
-    // Draw card background (dark with rounded corners)
-    ctx.fillStyle = COLORS.cardBg
+    // Banner height
+    const bannerH = 150
+
+    // Draw dark content area (below banner)
+    ctx.fillStyle = COLORS.contentBg
     ctx.beginPath()
-    ctx.roundRect(cardX, cardY, cardWidth, cardHeight, cardRadius)
+    ctx.roundRect(cardX, cardY, cardW, cardH, radius)
     ctx.fill()
 
-    // Draw gold confetti at top of card
-    const confettiHeight = 180
+    // Draw blue banner at top using novig_bg.png
     ctx.save()
     ctx.beginPath()
-    ctx.roundRect(cardX, cardY, cardWidth, confettiHeight, [cardRadius, cardRadius, 0, 0])
+    ctx.roundRect(cardX, cardY, cardW, bannerH, [radius, radius, 0, 0])
     ctx.clip()
 
-    // Draw confetti particles
-    const random = (seed: number) => {
-      const x = Math.sin(seed) * 10000
-      return x - Math.floor(x)
-    }
-
-    for (let i = 0; i < 60; i++) {
-      const x = cardX + random(i * 1.1) * cardWidth
-      const y = cardY + random(i * 2.2) * confettiHeight
-      const size = 4 + random(i * 3.3) * 12
-      const rotation = random(i * 4.4) * Math.PI * 2
-
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.rotate(rotation)
-      ctx.fillStyle = COLORS.confetti
-      ctx.globalAlpha = 0.3 + random(i * 5.5) * 0.5
-
-      // Mix of shapes
-      if (i % 3 === 0) {
-        ctx.fillRect(-size/2, -size/4, size, size/2)
-      } else if (i % 3 === 1) {
-        ctx.beginPath()
-        ctx.arc(0, 0, size/3, 0, Math.PI * 2)
-        ctx.fill()
-      } else {
-        ctx.beginPath()
-        ctx.moveTo(0, -size/2)
-        ctx.lineTo(size/3, size/2)
-        ctx.lineTo(-size/3, size/2)
-        ctx.closePath()
-        ctx.fill()
-      }
-      ctx.restore()
-    }
+    // Stretch banner to full card width
+    const bannerScale = cardW / bannerImage.width
+    const scaledBannerH = bannerImage.height * bannerScale
+    ctx.drawImage(bannerImage, cardX, cardY - (scaledBannerH - bannerH) / 2, cardW, scaledBannerH)
     ctx.restore()
 
-    // Draw logo with proper padding (40px from edges)
-    const logoWidth = 160
-    const logoHeight = (logoImage.height / logoImage.width) * logoWidth
-    ctx.drawImage(logoImage, cardX + 40, cardY + 40, logoWidth, logoHeight)
-
-    // Draw trophy icon for winning bets
+    // Trophy + Status pill in top right of blue banner area
     if (data.status === 'Won') {
-      ctx.font = '80px serif'
-      ctx.fillText('🏆', cardX + cardWidth - 130, cardY + 100)
+      ctx.font = '64px serif'
+      ctx.fillText('🏆', cardX + cardW - 200, cardY + 90)
     }
 
-    // Draw status pill (top right area)
-    const pillWidth = 120
-    const pillHeight = 50
-    const pillX = cardX + cardWidth - pillWidth - 50
-    const pillY = cardY + 130
+    // Status pill
+    const pillW = 100
+    const pillH = 44
+    const pillX = cardX + cardW - pillW - 30
+    const pillY = cardY + bannerH - pillH - 20
 
     const statusColors: Record<Status, string> = {
       Won: COLORS.pillWon,
@@ -183,97 +143,90 @@ function App() {
 
     ctx.fillStyle = statusColors[data.status]
     ctx.beginPath()
-    ctx.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2)
+    ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2)
     ctx.fill()
 
-    ctx.fillStyle = data.status === 'Pending' ? '#000000' : '#ffffff'
-    ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
+    ctx.fillStyle = data.status === 'Pending' ? '#000' : '#fff'
+    ctx.font = 'bold 24px system-ui, -apple-system, sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText(data.status, pillX + pillWidth / 2, pillY + pillHeight / 2 + 10)
-    ctx.textAlign = 'left'
+    ctx.fillText(data.status, pillX + pillW / 2, pillY + pillH / 2 + 8)
 
-    // Content area starts below confetti
-    const contentY = cardY + confettiHeight + 40
-    const contentX = cardX + 50
-    const contentWidth = cardWidth - 100
+    // Content area starts below banner
+    const contentY = cardY + bannerH + 30
+    const centerX = cardX + cardW / 2
 
-    // Market question (big text)
+    // Market question (centered)
     ctx.fillStyle = COLORS.text
-    ctx.font = 'bold 56px system-ui, -apple-system, sans-serif'
+    ctx.font = 'bold 48px system-ui, -apple-system, sans-serif'
+    ctx.textAlign = 'center'
 
     // Word wrap the question
     const words = data.marketQuestion.split(' ')
     let line = ''
-    let y = contentY + 60
-    const lineHeight = 70
-    const maxWidth = contentWidth - 150
+    let y = contentY + 50
+    const lineHeight = 58
+    const maxWidth = cardW - 100
 
     for (const word of words) {
       const testLine = line + word + ' '
       const metrics = ctx.measureText(testLine)
       if (metrics.width > maxWidth && line !== '') {
-        ctx.fillText(line.trim(), contentX, y)
+        ctx.fillText(line.trim(), centerX, y)
         line = word + ' '
         y += lineHeight
       } else {
         line = testLine
       }
     }
-    ctx.fillText(line.trim(), contentX, y)
+    ctx.fillText(line.trim(), centerX, y)
 
-    // Odds + Bet type line
-    const oddsY = y + 60
+    // Odds + Bet type line (centered)
+    const oddsY = y + 50
     ctx.fillStyle = COLORS.textMuted
-    ctx.font = '36px system-ui, -apple-system, sans-serif'
-    ctx.fillText(`${data.odds}  ·  ${data.betType}`, contentX, oddsY)
+    ctx.font = '32px system-ui, -apple-system, sans-serif'
+    ctx.fillText(`${data.odds}  ·  ${data.betType}`, centerX, oddsY)
 
-    // Amount → Paid section (centered)
-    const amountSectionY = data.size === 'square' ? oddsY + 180 : oddsY + 120
-    const centerX = cardX + cardWidth / 2
-    const spacing = data.size === 'square' ? 200 : 250
+    // === HERO SECTION: Amount → Paid (HUGE, CENTERED) ===
+    const heroY = data.size === 'square' ? oddsY + 140 : oddsY + 100
+    const cashSize = 70
+    const spacing = data.size === 'square' ? 180 : 220
 
     // Amount
-    const cashIconSize = 50
-    ctx.drawImage(cashImage, centerX - spacing - 30, amountSectionY - 35, cashIconSize, cashIconSize)
+    ctx.drawImage(cashImage, centerX - spacing - 80, heroY - 50, cashSize, cashSize)
     ctx.fillStyle = COLORS.text
-    ctx.font = 'bold 52px system-ui, -apple-system, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText(data.amount, centerX - spacing + 60, amountSectionY)
+    ctx.font = 'bold 96px system-ui, -apple-system, sans-serif'
+    ctx.fillText(data.amount, centerX - spacing + 40, heroY + 10)
 
     // Arrow
     ctx.fillStyle = COLORS.textMuted
-    ctx.font = '48px system-ui, -apple-system, sans-serif'
-    ctx.fillText('→', centerX, amountSectionY)
+    ctx.font = '72px system-ui, -apple-system, sans-serif'
+    ctx.fillText('→', centerX, heroY + 10)
 
-    // Paid
-    ctx.drawImage(cashImage, centerX + spacing - 100, amountSectionY - 35, cashIconSize, cashIconSize)
-    ctx.fillStyle = data.status === 'Won' ? COLORS.pillWon : COLORS.text
-    ctx.font = 'bold 52px system-ui, -apple-system, sans-serif'
-    ctx.fillText(data.paid, centerX + spacing, amountSectionY)
+    // Paid (GREEN)
+    ctx.drawImage(cashImage, centerX + spacing - 120, heroY - 50, cashSize, cashSize)
+    ctx.fillStyle = COLORS.green
+    ctx.font = 'bold 96px system-ui, -apple-system, sans-serif'
+    ctx.fillText(data.paid, centerX + spacing + 10, heroY + 10)
 
     // Labels under amounts
     ctx.fillStyle = COLORS.textMuted
     ctx.font = '28px system-ui, -apple-system, sans-serif'
-    ctx.fillText('Amount', centerX - spacing + 40, amountSectionY + 45)
-    ctx.fillText('Paid', centerX + spacing - 20, amountSectionY + 45)
-    ctx.textAlign = 'left'
+    ctx.fillText('Amount', centerX - spacing + 20, heroY + 55)
+    ctx.fillText('Paid', centerX + spacing - 10, heroY + 55)
 
-    // Footer with Bet ID and Date
-    const footerY = cardY + cardHeight - 50
+    // Footer (centered)
+    const footerY = cardY + cardH - 40
     ctx.fillStyle = COLORS.textMuted
-    ctx.font = '24px system-ui, -apple-system, sans-serif'
-    ctx.fillText(`ID: ${data.betId}`, contentX, footerY)
+    ctx.font = '22px system-ui, -apple-system, sans-serif'
+    ctx.fillText(`ID: ${data.betId}   ·   Placed: ${data.datePlaced}`, centerX, footerY)
 
-    ctx.textAlign = 'right'
-    ctx.fillText(`Placed: ${data.datePlaced}`, cardX + cardWidth - 50, footerY)
     ctx.textAlign = 'left'
 
-  }, [logoImage, cashImage, data])
+  }, [bannerImage, cashImage, data])
 
   const handleDownload = async () => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const dataUrl = canvas.toDataURL('image/png')
     const link = document.createElement('a')
     link.download = `novig-slip-${data.betId}.png`
@@ -284,12 +237,9 @@ function App() {
   const handleCopy = async () => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     canvas.toBlob(async (blob) => {
       if (blob) {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ])
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
         alert('Copied to clipboard!')
       }
     })
@@ -298,9 +248,9 @@ function App() {
   const currentSize = SIZES[data.size]
 
   return (
-    <div className="flex h-screen bg-slate-900">
+    <div className="flex h-screen" style={{ backgroundColor: '#0f172a' }}>
       {/* Controls Panel */}
-      <div className="w-[360px] bg-slate-800 p-6 overflow-y-auto border-r border-slate-700">
+      <div className="w-[360px] p-6 overflow-y-auto border-r border-slate-700" style={{ backgroundColor: '#1e293b' }}>
         <h1 className="text-2xl font-bold text-white mb-6">Novig Slip Machine</h1>
 
         <div className="space-y-4">
@@ -322,7 +272,6 @@ function App() {
                 value={data.odds}
                 onChange={e => setData(prev => ({ ...prev, odds: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
-                placeholder="-145"
               />
             </div>
             <div>
@@ -332,7 +281,6 @@ function App() {
                 value={data.betType}
                 onChange={e => setData(prev => ({ ...prev, betType: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
-                placeholder="Moneyline"
               />
             </div>
           </div>
@@ -345,7 +293,6 @@ function App() {
                 value={data.amount}
                 onChange={e => setData(prev => ({ ...prev, amount: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
-                placeholder="0.95"
               />
             </div>
             <div>
@@ -355,7 +302,6 @@ function App() {
                 value={data.paid}
                 onChange={e => setData(prev => ({ ...prev, paid: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
-                placeholder="1.60"
               />
             </div>
           </div>
