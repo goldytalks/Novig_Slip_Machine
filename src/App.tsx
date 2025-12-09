@@ -1,47 +1,68 @@
 import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
-// Canvas dimensions
-const CANVAS_WIDTH = 1920
-const CANVAS_HEIGHT = 1080
-
-// Brand colors
-const COLORS = {
-  dark: '#020617',
-  blue: '#38bdf8',
-  orange: '#f97316',
-  green: '#22c55e',
-  light: '#f8fafc',
+// Size presets
+const SIZES = {
+  widescreen: { width: 1920, height: 1080, label: 'Widescreen (16:9)' },
+  square: { width: 1080, height: 1080, label: 'Square (1:1)' },
 }
 
+// Brand colors - Updated to match real Novig slips
+const COLORS = {
+  background: '#0f0f0f',
+  cardBg: '#1a1a1a',
+  confetti: '#d4a855',
+  text: '#ffffff',
+  textMuted: '#888888',
+  pillWon: '#22c55e',
+  pillLost: '#ef4444',
+  pillPending: '#eab308',
+  accent: '#38bdf8',
+}
+
+type Status = 'Won' | 'Lost' | 'Pending'
+type SizeKey = 'widescreen' | 'square'
+
 interface BetslipData {
-  eventTitle: string
-  sideLabel: string
-  avgPrice: string
-  betAmount: string
-  toWinAmount: string
-  pillColor: string
-  marketImage: string | null
+  marketQuestion: string
+  odds: string
+  betType: string
+  amount: string
+  paid: string
+  status: Status
+  betId: string
+  datePlaced: string
+  size: SizeKey
+}
+
+// Generate random bet ID
+const generateBetId = () => {
+  return Math.random().toString(16).slice(2, 14)
+}
+
+// Get today's date formatted
+const getTodayDate = () => {
+  const today = new Date()
+  return `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`
 }
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const previewRef = useRef<HTMLDivElement>(null)
 
   const [data, setData] = useState<BetslipData>({
-    eventTitle: 'Will the Buffalo Bills win Super Bowl LIX?',
-    sideLabel: 'YES',
-    avgPrice: '52¢',
-    betAmount: '100.00',
-    toWinAmount: '192.00',
-    pillColor: COLORS.orange,
-    marketImage: null,
+    marketQuestion: 'Will the Buffalo Bills win Super Bowl LIX?',
+    odds: '-145',
+    betType: 'Moneyline',
+    amount: '0.95',
+    paid: '1.60',
+    status: 'Won',
+    betId: generateBetId(),
+    datePlaced: getTodayDate(),
+    size: 'widescreen',
   })
 
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null)
   const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null)
   const [cashImage, setCashImage] = useState<HTMLImageElement | null>(null)
-  const [marketImg, setMarketImg] = useState<HTMLImageElement | null>(null)
 
   // Load assets on mount
   useEffect(() => {
@@ -55,205 +76,199 @@ function App() {
     }
 
     Promise.all([
-      loadImage('/novig_bg.png'),
       loadImage('/Novig_Logo.svg'),
       loadImage('/Novig-Cash.png'),
-    ]).then(([bg, logo, cash]) => {
-      setBgImage(bg)
+    ]).then(([logo, cash]) => {
       setLogoImage(logo)
       setCashImage(cash)
     })
   }, [])
 
-  // Load market image when changed
-  useEffect(() => {
-    if (data.marketImage) {
-      const img = new Image()
-      img.onload = () => setMarketImg(img)
-      img.src = data.marketImage
-    } else {
-      setMarketImg(null)
-    }
-  }, [data.marketImage])
-
   // Draw canvas
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !bgImage || !logoImage || !cashImage) return
+    if (!canvas || !logoImage || !cashImage) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Clear canvas
-    ctx.fillStyle = COLORS.dark
+    const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = SIZES[data.size]
+    canvas.width = CANVAS_WIDTH
+    canvas.height = CANVAS_HEIGHT
+
+    // Clear canvas with dark background
+    ctx.fillStyle = COLORS.background
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
 
-    // Card dimensions
-    const cardPadding = 60
-    const cardWidth = CANVAS_WIDTH - cardPadding * 2
-    const cardHeight = CANVAS_HEIGHT - cardPadding * 2
-    const cardX = cardPadding
-    const cardY = cardPadding
-
-    // Draw card background (blue with confetti)
+    // Card dimensions with padding
+    const padding = data.size === 'square' ? 60 : 80
+    const cardX = padding
+    const cardY = padding
+    const cardWidth = CANVAS_WIDTH - padding * 2
+    const cardHeight = CANVAS_HEIGHT - padding * 2
     const cardRadius = 40
-    ctx.save()
+
+    // Draw card background (dark with rounded corners)
+    ctx.fillStyle = COLORS.cardBg
     ctx.beginPath()
     ctx.roundRect(cardX, cardY, cardWidth, cardHeight, cardRadius)
-    ctx.clip()
-
-    // Draw the background image scaled to fit
-    const bgScale = Math.max(cardWidth / bgImage.width, cardHeight / bgImage.height)
-    const bgW = bgImage.width * bgScale
-    const bgH = bgImage.height * bgScale
-    const bgX = cardX + (cardWidth - bgW) / 2
-    const bgY = cardY + (cardHeight - bgH) / 2
-    ctx.drawImage(bgImage, bgX, bgY, bgW, bgH)
-    ctx.restore()
-
-    // Draw logo in top-left of card
-    const logoWidth = 200
-    const logoHeight = (logoImage.height / logoImage.width) * logoWidth
-    ctx.drawImage(logoImage, cardX + 40, cardY + 30, logoWidth, logoHeight)
-
-    // Inner dark area
-    const innerPadding = 30
-    const innerX = cardX + innerPadding
-    const innerY = cardY + 120
-    const innerWidth = cardWidth - innerPadding * 2
-    const innerHeight = cardHeight - 120 - innerPadding - 60 // Leave room for perforated edge
-    const innerRadius = 30
-
-    // Draw dark inner rectangle
-    ctx.fillStyle = COLORS.dark
-    ctx.beginPath()
-    ctx.roundRect(innerX, innerY, innerWidth, innerHeight, innerRadius)
     ctx.fill()
 
-    // Draw perforated edge (scalloped circles at bottom)
-    const circleRadius = 12
-    const circleSpacing = 30
-    const circleY = innerY + innerHeight + circleRadius
-    const numCircles = Math.floor(innerWidth / circleSpacing)
-    const startX = innerX + (innerWidth - (numCircles - 1) * circleSpacing) / 2
+    // Draw gold confetti at top of card
+    const confettiHeight = 180
+    ctx.save()
+    ctx.beginPath()
+    ctx.roundRect(cardX, cardY, cardWidth, confettiHeight, [cardRadius, cardRadius, 0, 0])
+    ctx.clip()
 
-    ctx.fillStyle = COLORS.dark
-    for (let i = 0; i < numCircles; i++) {
-      ctx.beginPath()
-      ctx.arc(startX + i * circleSpacing, circleY, circleRadius, 0, Math.PI * 2)
-      ctx.fill()
+    // Draw confetti particles
+    const random = (seed: number) => {
+      const x = Math.sin(seed) * 10000
+      return x - Math.floor(x)
     }
 
-    // Market image (if uploaded)
-    const imgSize = 180
-    const imgX = innerX + 50
-    const imgY = innerY + 40
+    for (let i = 0; i < 60; i++) {
+      const x = cardX + random(i * 1.1) * cardWidth
+      const y = cardY + random(i * 2.2) * confettiHeight
+      const size = 4 + random(i * 3.3) * 12
+      const rotation = random(i * 4.4) * Math.PI * 2
 
-    if (marketImg) {
       ctx.save()
-      ctx.beginPath()
-      ctx.roundRect(imgX, imgY, imgSize, imgSize, 20)
-      ctx.clip()
-      ctx.drawImage(marketImg, imgX, imgY, imgSize, imgSize)
+      ctx.translate(x, y)
+      ctx.rotate(rotation)
+      ctx.fillStyle = COLORS.confetti
+      ctx.globalAlpha = 0.3 + random(i * 5.5) * 0.5
+
+      // Mix of shapes
+      if (i % 3 === 0) {
+        ctx.fillRect(-size/2, -size/4, size, size/2)
+      } else if (i % 3 === 1) {
+        ctx.beginPath()
+        ctx.arc(0, 0, size/3, 0, Math.PI * 2)
+        ctx.fill()
+      } else {
+        ctx.beginPath()
+        ctx.moveTo(0, -size/2)
+        ctx.lineTo(size/3, size/2)
+        ctx.lineTo(-size/3, size/2)
+        ctx.closePath()
+        ctx.fill()
+      }
       ctx.restore()
-    } else {
-      // Placeholder
-      ctx.fillStyle = '#334155'
-      ctx.beginPath()
-      ctx.roundRect(imgX, imgY, imgSize, imgSize, 20)
-      ctx.fill()
+    }
+    ctx.restore()
+
+    // Draw logo with proper padding (40px from edges)
+    const logoWidth = 160
+    const logoHeight = (logoImage.height / logoImage.width) * logoWidth
+    ctx.drawImage(logoImage, cardX + 40, cardY + 40, logoWidth, logoHeight)
+
+    // Draw trophy icon for winning bets
+    if (data.status === 'Won') {
+      ctx.font = '80px serif'
+      ctx.fillText('🏆', cardX + cardWidth - 130, cardY + 100)
     }
 
-    // Event title
-    const titleX = imgX + imgSize + 40
-    const titleY = innerY + 70
-    const titleMaxWidth = innerWidth - imgSize - 150
+    // Draw status pill (top right area)
+    const pillWidth = 120
+    const pillHeight = 50
+    const pillX = cardX + cardWidth - pillWidth - 50
+    const pillY = cardY + 130
 
-    ctx.fillStyle = COLORS.light
-    ctx.font = 'bold 54px system-ui, -apple-system, sans-serif'
+    const statusColors: Record<Status, string> = {
+      Won: COLORS.pillWon,
+      Lost: COLORS.pillLost,
+      Pending: COLORS.pillPending,
+    }
 
-    // Word wrap the title
-    const words = data.eventTitle.split(' ')
+    ctx.fillStyle = statusColors[data.status]
+    ctx.beginPath()
+    ctx.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2)
+    ctx.fill()
+
+    ctx.fillStyle = data.status === 'Pending' ? '#000000' : '#ffffff'
+    ctx.font = 'bold 28px system-ui, -apple-system, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(data.status, pillX + pillWidth / 2, pillY + pillHeight / 2 + 10)
+    ctx.textAlign = 'left'
+
+    // Content area starts below confetti
+    const contentY = cardY + confettiHeight + 40
+    const contentX = cardX + 50
+    const contentWidth = cardWidth - 100
+
+    // Market question (big text)
+    ctx.fillStyle = COLORS.text
+    ctx.font = 'bold 56px system-ui, -apple-system, sans-serif'
+
+    // Word wrap the question
+    const words = data.marketQuestion.split(' ')
     let line = ''
-    let y = titleY
-    const lineHeight = 65
+    let y = contentY + 60
+    const lineHeight = 70
+    const maxWidth = contentWidth - 150
 
     for (const word of words) {
       const testLine = line + word + ' '
       const metrics = ctx.measureText(testLine)
-      if (metrics.width > titleMaxWidth && line !== '') {
-        ctx.fillText(line.trim(), titleX, y)
+      if (metrics.width > maxWidth && line !== '') {
+        ctx.fillText(line.trim(), contentX, y)
         line = word + ' '
         y += lineHeight
       } else {
         line = testLine
       }
     }
-    ctx.fillText(line.trim(), titleX, y)
+    ctx.fillText(line.trim(), contentX, y)
 
-    // Side pill (centered below title area)
-    const pillWidth = 200
-    const pillHeight = 70
-    const pillX = innerX + (innerWidth - pillWidth) / 2
-    const pillY = innerY + innerHeight / 2 - 20
+    // Odds + Bet type line
+    const oddsY = y + 60
+    ctx.fillStyle = COLORS.textMuted
+    ctx.font = '36px system-ui, -apple-system, sans-serif'
+    ctx.fillText(`${data.odds}  ·  ${data.betType}`, contentX, oddsY)
 
-    ctx.fillStyle = data.pillColor
-    ctx.beginPath()
-    ctx.roundRect(pillX, pillY, pillWidth, pillHeight, pillHeight / 2)
-    ctx.fill()
+    // Amount → Paid section (centered)
+    const amountSectionY = data.size === 'square' ? oddsY + 180 : oddsY + 120
+    const centerX = cardX + cardWidth / 2
+    const spacing = data.size === 'square' ? 200 : 250
 
-    ctx.fillStyle = COLORS.dark
-    ctx.font = 'bold 40px system-ui, -apple-system, sans-serif'
+    // Amount
+    const cashIconSize = 50
+    ctx.drawImage(cashImage, centerX - spacing - 30, amountSectionY - 35, cashIconSize, cashIconSize)
+    ctx.fillStyle = COLORS.text
+    ctx.font = 'bold 52px system-ui, -apple-system, sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText(data.sideLabel, pillX + pillWidth / 2, pillY + pillHeight / 2 + 14)
+    ctx.fillText(data.amount, centerX - spacing + 60, amountSectionY)
+
+    // Arrow
+    ctx.fillStyle = COLORS.textMuted
+    ctx.font = '48px system-ui, -apple-system, sans-serif'
+    ctx.fillText('→', centerX, amountSectionY)
+
+    // Paid
+    ctx.drawImage(cashImage, centerX + spacing - 100, amountSectionY - 35, cashIconSize, cashIconSize)
+    ctx.fillStyle = data.status === 'Won' ? COLORS.pillWon : COLORS.text
+    ctx.font = 'bold 52px system-ui, -apple-system, sans-serif'
+    ctx.fillText(data.paid, centerX + spacing, amountSectionY)
+
+    // Labels under amounts
+    ctx.fillStyle = COLORS.textMuted
+    ctx.font = '28px system-ui, -apple-system, sans-serif'
+    ctx.fillText('Amount', centerX - spacing + 40, amountSectionY + 45)
+    ctx.fillText('Paid', centerX + spacing - 20, amountSectionY + 45)
     ctx.textAlign = 'left'
 
-    // Avg price (right side of pill)
-    ctx.fillStyle = COLORS.light
-    ctx.font = '36px system-ui, -apple-system, sans-serif'
-    const avgText = `Avg ${data.avgPrice}`
-    ctx.fillText(avgText, pillX + pillWidth + 60, pillY + pillHeight / 2 + 12)
+    // Footer with Bet ID and Date
+    const footerY = cardY + cardHeight - 50
+    ctx.fillStyle = COLORS.textMuted
+    ctx.font = '24px system-ui, -apple-system, sans-serif'
+    ctx.fillText(`ID: ${data.betId}`, contentX, footerY)
 
-    // Placed and To Win section
-    const amountY = innerY + innerHeight - 100
-    const leftCol = innerX + 200
-    const rightCol = innerX + innerWidth - 450
+    ctx.textAlign = 'right'
+    ctx.fillText(`Placed: ${data.datePlaced}`, cardX + cardWidth - 50, footerY)
+    ctx.textAlign = 'left'
 
-    // Placed label
-    ctx.fillStyle = '#94a3b8'
-    ctx.font = '32px system-ui, -apple-system, sans-serif'
-    ctx.fillText('Placed', leftCol, amountY - 50)
-
-    // Placed amount with cash icon
-    const cashIconSize = 50
-    ctx.drawImage(cashImage, leftCol - 60, amountY - 40, cashIconSize, cashIconSize)
-    ctx.fillStyle = COLORS.light
-    ctx.font = 'bold 48px system-ui, -apple-system, sans-serif'
-    ctx.fillText(`$${data.betAmount}`, leftCol, amountY)
-
-    // To Win label
-    ctx.fillStyle = '#94a3b8'
-    ctx.font = '32px system-ui, -apple-system, sans-serif'
-    ctx.fillText('To Win', rightCol, amountY - 50)
-
-    // To Win amount with cash icon
-    ctx.drawImage(cashImage, rightCol - 60, amountY - 40, cashIconSize, cashIconSize)
-    ctx.fillStyle = COLORS.green
-    ctx.font = 'bold 48px system-ui, -apple-system, sans-serif'
-    ctx.fillText(`$${data.toWinAmount}`, rightCol, amountY)
-
-  }, [bgImage, logoImage, cashImage, marketImg, data])
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        setData(prev => ({ ...prev, marketImage: reader.result as string }))
-      }
-      reader.readAsDataURL(file)
-    }
-  }
+  }, [logoImage, cashImage, data])
 
   const handleDownload = async () => {
     const canvas = canvasRef.current
@@ -261,7 +276,7 @@ function App() {
 
     const dataUrl = canvas.toDataURL('image/png')
     const link = document.createElement('a')
-    link.download = 'novig-betslip.png'
+    link.download = `novig-slip-${data.betId}.png`
     link.href = dataUrl
     link.click()
   }
@@ -280,18 +295,20 @@ function App() {
     })
   }
 
+  const currentSize = SIZES[data.size]
+
   return (
     <div className="flex h-screen bg-slate-900">
       {/* Controls Panel */}
-      <div className="w-[340px] bg-slate-800 p-6 overflow-y-auto border-r border-slate-700">
+      <div className="w-[360px] bg-slate-800 p-6 overflow-y-auto border-r border-slate-700">
         <h1 className="text-2xl font-bold text-white mb-6">Novig Slip Machine</h1>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Event Title</label>
+            <label className="block text-sm text-slate-400 mb-1">Market Question</label>
             <textarea
-              value={data.eventTitle}
-              onChange={e => setData(prev => ({ ...prev, eventTitle: e.target.value }))}
+              value={data.marketQuestion}
+              onChange={e => setData(prev => ({ ...prev, marketQuestion: e.target.value }))}
               className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none resize-none"
               rows={3}
             />
@@ -299,79 +316,112 @@ function App() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Side</label>
+              <label className="block text-sm text-slate-400 mb-1">Odds</label>
               <input
                 type="text"
-                value={data.sideLabel}
-                onChange={e => setData(prev => ({ ...prev, sideLabel: e.target.value }))}
+                value={data.odds}
+                onChange={e => setData(prev => ({ ...prev, odds: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                placeholder="-145"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Avg Price</label>
+              <label className="block text-sm text-slate-400 mb-1">Bet Type</label>
               <input
                 type="text"
-                value={data.avgPrice}
-                onChange={e => setData(prev => ({ ...prev, avgPrice: e.target.value }))}
+                value={data.betType}
+                onChange={e => setData(prev => ({ ...prev, betType: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                placeholder="Moneyline"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Bet Amount ($)</label>
+              <label className="block text-sm text-slate-400 mb-1">Amount</label>
               <input
                 type="text"
-                value={data.betAmount}
-                onChange={e => setData(prev => ({ ...prev, betAmount: e.target.value }))}
+                value={data.amount}
+                onChange={e => setData(prev => ({ ...prev, amount: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                placeholder="0.95"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">To Win ($)</label>
+              <label className="block text-sm text-slate-400 mb-1">Paid</label>
               <input
                 type="text"
-                value={data.toWinAmount}
-                onChange={e => setData(prev => ({ ...prev, toWinAmount: e.target.value }))}
+                value={data.paid}
+                onChange={e => setData(prev => ({ ...prev, paid: e.target.value }))}
+                className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+                placeholder="1.60"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Status</label>
+            <select
+              value={data.status}
+              onChange={e => setData(prev => ({ ...prev, status: e.target.value as Status }))}
+              className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="Won">Won</option>
+              <option value="Lost">Lost</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Bet ID</label>
+              <input
+                type="text"
+                value={data.betId}
+                onChange={e => setData(prev => ({ ...prev, betId: e.target.value }))}
+                className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Date Placed</label>
+              <input
+                type="text"
+                value={data.datePlaced}
+                onChange={e => setData(prev => ({ ...prev, datePlaced: e.target.value }))}
                 className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Pill Color</label>
-            <div className="flex gap-2">
-              {[COLORS.orange, COLORS.green, COLORS.blue, '#ef4444', '#a855f7'].map(color => (
-                <button
-                  key={color}
-                  onClick={() => setData(prev => ({ ...prev, pillColor: color }))}
-                  className={`w-10 h-10 rounded-full border-2 ${data.pillColor === color ? 'border-white' : 'border-transparent'}`}
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
+            <label className="block text-sm text-slate-400 mb-1">Size</label>
+            <select
+              value={data.size}
+              onChange={e => setData(prev => ({ ...prev, size: e.target.value as SizeKey }))}
+              className="w-full bg-slate-700 text-white rounded-lg p-3 border border-slate-600 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="widescreen">Widescreen (1920x1080)</option>
+              <option value="square">Square (1080x1080)</option>
+            </select>
           </div>
 
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Market Image</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-600 file:text-white hover:file:bg-slate-500"
-            />
-          </div>
+          <button
+            onClick={() => setData(prev => ({ ...prev, betId: generateBetId() }))}
+            className="w-full bg-slate-600 hover:bg-slate-500 text-white py-2 rounded-lg text-sm transition-colors"
+          >
+            Generate New Bet ID
+          </button>
         </div>
       </div>
 
       {/* Preview Panel */}
       <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-auto">
-        <div ref={previewRef} className="relative">
+        <div className="relative">
           <canvas
             ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
+            width={currentSize.width}
+            height={currentSize.height}
             className="max-w-full h-auto rounded-lg shadow-2xl"
             style={{ maxHeight: 'calc(100vh - 200px)' }}
           />
